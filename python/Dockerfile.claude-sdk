@@ -1,0 +1,57 @@
+ARG KAGENT_ADK_VERSION=latest
+ARG DOCKER_REGISTRY=ghcr.io
+ARG DOCKER_REPO=kagent-dev/kagent
+FROM $DOCKER_REGISTRY/$DOCKER_REPO/kagent-adk:$KAGENT_ADK_VERSION
+
+# Switch to root to install Node.js and Claude Code CLI
+USER root
+
+# Install Node.js from Alpine repos
+RUN --mount=type=cache,target=/var/cache/apk,rw \
+    apk update && apk add --no-cache nodejs npm
+
+# Verify Node.js installation
+RUN node --version && npm --version
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code@latest && \
+    ln -s /usr/local/bin/claude /usr/local/bin/claude-code || true
+
+# Verify Claude Code CLI installation
+RUN claude --version
+
+# Switch back to python user
+USER python
+
+WORKDIR /.kagent
+
+# Copy only required packages
+COPY --chown=python:pythongroup packages/kagent-claude-sdk packages/kagent-claude-sdk
+COPY --chown=python:pythongroup packages/kagent-core packages/kagent-core
+COPY --chown=python:pythongroup .python-version .python-version
+COPY --chown=python:pythongroup pyproject.toml .
+
+# Install kagent-claude-sdk package into /app/.venv (respecting UV_PROJECT_ENVIRONMENT from base)
+RUN --mount=type=cache,target=/.kagent/cache,uid=1001,gid=1001 \
+    uv sync --package kagent-claude-sdk && \
+    uv cache prune
+
+# Ensure /app/.venv/bin is in PATH (where uv installs scripts)
+ENV PATH="/app/.venv/bin:/.kagent/.venv/bin:$PATH"
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+EXPOSE 8080
+ARG VERSION
+
+LABEL org.opencontainers.image.source=https://github.com/kagent-dev/kagent
+LABEL org.opencontainers.image.description="Kagent Claude SDK agent runtime"
+LABEL org.opencontainers.image.authors="Kagent Creators 🤖"
+LABEL org.opencontainers.image.version="$VERSION"
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["kagent-claude-sdk"]
+CMD ["run", "--host", "0.0.0.0", "--port", "8080"]
