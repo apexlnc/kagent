@@ -35,16 +35,19 @@ CONTROLLER_IMAGE_NAME ?= controller
 UI_IMAGE_NAME ?= ui
 APP_IMAGE_NAME ?= app
 KAGENT_ADK_IMAGE_NAME ?= kagent-adk
+CLAUDE_SDK_IMAGE_NAME ?= claude-sdk-app
 
 CONTROLLER_IMAGE_TAG ?= $(VERSION)
 UI_IMAGE_TAG ?= $(VERSION)
 APP_IMAGE_TAG ?= $(VERSION)
 KAGENT_ADK_IMAGE_TAG ?= $(VERSION)
+CLAUDE_SDK_IMAGE_TAG ?= $(VERSION)
 
 CONTROLLER_IMG ?= $(DOCKER_REGISTRY)/$(DOCKER_REPO)/$(CONTROLLER_IMAGE_NAME):$(CONTROLLER_IMAGE_TAG)
 UI_IMG ?= $(DOCKER_REGISTRY)/$(DOCKER_REPO)/$(UI_IMAGE_NAME):$(UI_IMAGE_TAG)
 APP_IMG ?= $(DOCKER_REGISTRY)/$(DOCKER_REPO)/$(APP_IMAGE_NAME):$(APP_IMAGE_TAG)
 KAGENT_ADK_IMG ?= $(DOCKER_REGISTRY)/$(DOCKER_REPO)/$(KAGENT_ADK_IMAGE_NAME):$(KAGENT_ADK_IMAGE_TAG)
+CLAUDE_SDK_IMG ?= $(DOCKER_REGISTRY)/$(DOCKER_REPO)/$(CLAUDE_SDK_IMAGE_NAME):$(CLAUDE_SDK_IMAGE_TAG)
 
 #take from go/go.mod
 AWK ?= $(shell command -v gawk || command -v awk)
@@ -181,6 +184,7 @@ build: buildx-create build-controller build-ui build-app
 	@echo "UI Image: $(UI_IMG)"
 	@echo "App Image: $(APP_IMG)"
 	@echo "Kagent ADK Image: $(KAGENT_ADK_IMG)"
+	@echo "Claude SDK Image: $(CLAUDE_SDK_IMG)"
 	@echo "Tools Image: $(TOOLS_IMG)"
 
 .PHONY: build-monitor
@@ -202,6 +206,7 @@ build-img-versions:
 	@echo ui=$(UI_IMG)
 	@echo app=$(APP_IMG)
 	@echo kagent-adk=$(KAGENT_ADK_IMG)
+	@echo claude-sdk-app=$(CLAUDE_SDK_IMG)
 
 .PHONY: lint
 lint:
@@ -209,7 +214,7 @@ lint:
 	make -C python lint
 
 .PHONY: push
-push: push-controller push-ui push-app push-kagent-adk
+push: push-controller push-ui push-app push-kagent-adk push-claude-sdk
 
 .PHONY: controller-manifests
 controller-manifests:
@@ -231,6 +236,14 @@ build-kagent-adk: buildx-create
 .PHONY: build-app
 build-app: buildx-create build-kagent-adk
 	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) $(TOOLS_IMAGE_BUILD_ARGS) --build-arg KAGENT_ADK_VERSION=$(KAGENT_ADK_IMAGE_TAG) --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) -t $(APP_IMG) -f python/Dockerfile.app ./python
+
+.PHONY: build-claude-sdk
+build-claude-sdk: buildx-create build-kagent-adk
+	$(DOCKER_BUILDER) build $(DOCKER_BUILD_ARGS) $(TOOLS_IMAGE_BUILD_ARGS) --build-arg KAGENT_ADK_VERSION=$(KAGENT_ADK_IMAGE_TAG) --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg DOCKER_REPO=$(DOCKER_REPO) -t $(CLAUDE_SDK_IMG) -f python/Dockerfile.claude-sdk ./python
+
+.PHONY: push-claude-sdk
+push-claude-sdk: build-claude-sdk
+	@echo "Claude SDK image pushed: $(CLAUDE_SDK_IMG)"
 
 .PHONY: helm-cleanup
 helm-cleanup:
