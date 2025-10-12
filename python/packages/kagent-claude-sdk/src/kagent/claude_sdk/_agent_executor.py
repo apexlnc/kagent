@@ -144,6 +144,7 @@ class ClaudeSDKAgentExecutor(AgentExecutor):
         task_result_aggregator = TaskResultAggregator()
         session_id = None
         result_message_received = None  # Track the ResultMessage to check is_error
+        accumulated_text = []  # Accumulate streamed text for final artifact
 
         # Create Claude SDK client with timeout
         # The async context manager automatically handles connection setup and teardown
@@ -162,9 +163,19 @@ class ClaudeSDKAgentExecutor(AgentExecutor):
                             session_id = message.session_id
 
                         # Track ResultMessage to check is_error flag
-                        from claude_agent_sdk.types import ResultMessage
+                        from claude_agent_sdk.types import ResultMessage, StreamEvent
                         if isinstance(message, ResultMessage):
                             result_message_received = message
+
+                        # Accumulate streamed text for final artifact
+                        if isinstance(message, StreamEvent):
+                            event_type = message.event.get("type", "") if message.event else ""
+                            if event_type == "content_block_delta":
+                                delta = message.event.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    text = delta.get("text", "")
+                                    if text:
+                                        accumulated_text.append(text)
 
                         # Log the raw message for debugging
                         logger.debug(f"Received message type: {type(message).__name__}")
@@ -230,13 +241,24 @@ class ClaudeSDKAgentExecutor(AgentExecutor):
         )
 
         if is_success:
-            # Success case - send completion without artifact if no parts accumulated
-            # (streaming already sent the content)
-            if (
+            # Success case - always send final artifact to persist content in UI
+            # For streaming responses, accumulated_text contains the full output
+            # For non-streaming, use parts from aggregator
+            final_parts = []
+
+            if accumulated_text:
+                # We have streamed text - join it into final artifact
+                final_text = "".join(accumulated_text)
+                final_parts = [Part(TextPart(text=final_text))]
+            elif (
                 task_result_aggregator.task_status_message is not None
                 and task_result_aggregator.task_status_message.parts
             ):
-                # Send artifact if we have accumulated parts
+                # Use accumulated parts from aggregator (non-streaming case)
+                final_parts = task_result_aggregator.task_status_message.parts
+
+            # Always send artifact if we have any content
+            if final_parts:
                 await event_queue.enqueue_event(
                     TaskArtifactUpdateEvent(
                         task_id=context.task_id,
@@ -244,7 +266,7 @@ class ClaudeSDKAgentExecutor(AgentExecutor):
                         context_id=context.context_id,
                         artifact=Artifact(
                             artifact_id=str(uuid.uuid4()),
-                            parts=task_result_aggregator.task_status_message.parts,
+                            parts=final_parts,
                         ),
                     )
                 )
