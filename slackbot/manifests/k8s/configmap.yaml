@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kagent-slackbot-config
+  namespace: kagent-slackbot
+data:
+  KAGENT_BASE_URL: "http://kagent.kagent.svc.cluster.local:8083"
+  KAGENT_TIMEOUT: "30"
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+  LOG_LEVEL: "INFO"
+  permissions.yaml: |
+    # Agent-level permissions configuration
+    # Configure which users/groups can access which agents
+
+    # Example: Restrict k8s-agent to SRE team
+    # agent_permissions:
+    #   kagent/k8s-agent:
+    #     user_groups:
+    #       - S0T8FCWSB  # Replace with your Slack user group ID
+    #     users:
+    #       - admin@company.com
+    #     deny_message: "K8s agent requires @sre-team membership"
+
+    # Default: If agent not listed above, it's public (accessible to all)
+    agent_permissions: {}
+
+    # Global settings
+    settings:
+      user_group_cache_ttl: 300  # 5 minutes
+  PERMISSIONS_FILE: "/app/config/permissions.yaml"

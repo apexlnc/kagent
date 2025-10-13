@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slack-bot-service
+  namespace: slack-bot
+  labels:
+    app: slack-bot
+  annotations:
+    cloud.google.com/backend-config: '{"default": "slack-webhook-backend"}'
+spec:
+  type: ClusterIP
+  selector:
+    app: slack-bot
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
